@@ -13,7 +13,5 @@ X11Forwarding no
 AllowTcpForwarding no
 AllowAgentForwarding no
 
-AllowUsers admin
-
 ClientAliveInterval 300
 ClientAliveCountMax 2

@@ -4,7 +4,7 @@ from pyinfra.operations import server, files, apk
 files.put(
     name="Harden sshd configuration",
     src="files/sshd_config",
-    dest="/etc/ssh/sshd_config",
+    dest="/etc/ssh/sshd_config.d/99-hardening.conf",
     mode="600",
 )
 
