@@ -33,20 +33,6 @@ server.shell(
     ],
 )
 
-# Static IP
-files.put(
-    name="Static IP",
-    src="files/interfaces",
-    dest="/etc/network/interfaces",
-    mode="644",
-)
-
-# Hostname
-server.hostname(
-    name="Set hostname",
-    hostname="alpine",
-)
-
 # apk cache
 files.directory(
     name="Create apk cache target directory",

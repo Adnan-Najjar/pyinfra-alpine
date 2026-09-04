@@ -1,0 +1,11 @@
+[Interface]
+Address = {{ my_wg_ip }}
+PrivateKey = {{ my_private_key }}
+ListenPort = {{ listen_port }}
+
+{% for peer in peers %}
+[Peer]
+PublicKey = {{ peer.public_key }}
+AllowedIPs = {{ peer.allowed_ips }}
+Endpoint = {{ peer.endpoint }}
+{% endfor %}
