@@ -1,5 +1,6 @@
 from pyinfra.context import host
 from pyinfra.operations import server, files, apk
+from pyinfra.facts.files import FindInFile
 from tasks.wireguard import wireguard_setup
 
 # SSH hardening
@@ -27,12 +28,10 @@ apk.packages(
     packages=["nftables"],
 )
 
-server.shell(
+server.service(
     name="Configure firewall",
-    commands=[
-        # Chains & Rules
-        "rc-update add nftables default",
-    ],
+    service="nftables",
+    enabled=True,
 )
 
 # apk cache
@@ -53,12 +52,19 @@ files.link(
 )
 
 # Community repo
-server.shell(
-    name="Enable Alpine community repository",
-    commands=[
-        "sed -i 's|^#\\(.*\\/community\\)$|\\1|' /etc/apk/repositories",
-    ],
+community_repo_links: list | None = host.get_fact(
+    FindInFile,
+    path="/etc/apk/repositories",
+    pattern="^#.*community",
 )
+
+if community_repo_links:
+    files.replace(
+        name="Enable Alpine Community Repository",
+        path="/etc/apk/repositories",
+        text=community_repo_links[0],
+        replace=community_repo_links[0].replace("#", ""),
+    )
 
 # Update
 apk.update()
