@@ -1,4 +1,5 @@
 from pyinfra.operations import server, files, apk
+from tasks.wireguard import wireguard_setup
 
 # SSH hardening
 files.put(
@@ -60,3 +61,6 @@ server.shell(
 
 # Update
 apk.update()
+
+# WireGuard setup
+wireguard_setup(name="Setup WireGuard on inventory")

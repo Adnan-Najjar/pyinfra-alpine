@@ -1,5 +1,3 @@
-wg_listen_port = 51820
-
 hosts = [
     (
         "@incus/vm1",
