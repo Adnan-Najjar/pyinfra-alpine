@@ -3,6 +3,11 @@ from pyinfra.operations import server, files, apk
 from pyinfra.facts.files import FindInFile
 from tasks.wireguard import wireguard_setup
 
+useradd_install = apk.packages(
+    name="Install useradd from shadow package",
+    packages=["shadow"],
+)
+
 # SSH hardening
 files.put(
     name="Harden sshd configuration",
@@ -20,6 +25,7 @@ server.user(
     groups=["wheel"],
     append=True,
     create_home=True,
+    _if=useradd_install.did_succeed,
 )
 
 # Firewall
