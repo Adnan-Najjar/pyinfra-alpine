@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = "==3.14.7"
 dependencies = [
     "pyinfra==3.10.0",
+    "pyinfrincus>=0.8.1",
 ]
 
 [tool.uv]

@@ -382,10 +382,26 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "pyinfra" },
+    { name = "pyinfrincus" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyinfra", specifier = "==3.10.0" }]
+requires-dist = [
+    { name = "pyinfra", specifier = "==3.10.0" },
+    { name = "pyinfrincus", specifier = ">=0.8.1" },
+]
+
+[[package]]
+name = "pyinfrincus"
+version = "0.8.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyinfra" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/15/64/e33e129870588d5ae167dce20b92806b684f8407bbed13106df7f29c5715/pyinfrincus-0.8.1.tar.gz", hash = "sha256:2c8d397ea9eeb219d03348fd77472ba795c75ea560fd4f4f2498058a2f057099", size = 2910, upload-time = "2026-05-18T21:06:48.231Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/4f/3acbef74e22961e7aefaef063078c14aa39be086c797ce682605a4d0adb0/pyinfrincus-0.8.1-py3-none-any.whl", hash = "sha256:8f61a271ac975d37465f866b3e161e89bf540734e771f5a6d88c5303e7d5b3d9", size = 4245, upload-time = "2026-05-18T21:06:46.906Z" },
+]
 
 [[package]]
 name = "pynacl"
