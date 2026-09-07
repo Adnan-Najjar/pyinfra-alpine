@@ -1,10 +1,9 @@
 from pyinfra.context import host, inventory
-from pyinfra.facts.server import Command
 from pyinfra.facts.openrc import OpenrcStatus
-from pyinfra.facts.files import File, FileContents
+from pyinfra.facts.files import File
 from pyinfra.api.operation import operation
-from pyinfra.operations import files, server, apk
-
+from pyinfra.operations import files, server
+from facts import WireGuardPrivateKey, WireGuardPublicKey
 
 @operation()
 def wireguard_setup(
@@ -14,17 +13,8 @@ def wireguard_setup(
     public_key="/etc/wireguard/public.key",
 ):
 
-    # Install wireguard and create public and private keys (if they don't exist)
-    if not host.get_fact(File, private_key):
-        my_private_key = host.get_fact(
-            Command,
-            command=f"command -v wg >/dev/null 2>&1 || apk add -q wireguard-tools; "
-            f"umask 077 &&"
-            f"wg genkey | tee {private_key} | wg pubkey > {public_key}; "
-            f"cat {private_key}",
-        ).strip()
-    else:
-        my_private_key = host.get_fact(FileContents, private_key)
+    # Get current host private key (or create it if it doesn't exist)
+    my_private_key = host.get_fact(WireGuardPrivateKey, private_key_path=private_key)
 
     # Build list of peers from all OTHER hosts in inventory
     peers = []
@@ -32,26 +22,13 @@ def wireguard_setup(
         if h.name == host.name:
             continue
 
-        # Get public key if it exists
-        peer_pubkey = "".join(h.get_fact(FileContents, public_key)).strip()
-        # If public key doesn't exist, but private key does, derive it from the private key
-        if h.get_fact(File, private_key) and not peer_pubkey:
-            peer_pubkey = h.get_fact(
-                Command,
-                command=f"command -v wg >/dev/null 2>&1 || apk add -q wireguard-tools; "
-                f"umask 077 &&"
-                f"wg pubkey < {private_key} > {public_key}; "
-                f"cat {public_key}",
-            ).strip()
-        # If both doesn't exist, Create public and private keys (if they don't exist)
-        elif not h.get_fact(File, private_key):
-            peer_pubkey = h.get_fact(
-                Command,
-                command=f"command -v wg >/dev/null 2>&1 || apk add -q wireguard-tools; "
-                f"umask 077 &&"
-                f"wg genkey | tee {private_key} | wg pubkey > {public_key}; "
-                f"cat {public_key}",
-            ).strip()
+        # Get current host public key (or create it if it doesn't exist)
+        peer_pubkey = h.get_fact(WireGuardPublicKey, private_key_path=private_key, public_key_path=public_key)
+        if not peer_pubkey:
+            h.get_fact(WireGuardPrivateKey, private_key_path=private_key)
+            peer_pubkey = h.get_fact(WireGuardPublicKey, private_key_path=private_key, public_key_path=public_key)
+            if not peer_pubkey:
+                continue
 
         peer_wg_ip = h.data.get("wg_ip")
         # Skip if no WireGuard IP
@@ -65,11 +42,6 @@ def wireguard_setup(
                 "endpoint": f"{h.name}:{listen_port}",
             }
         )
-
-    yield from apk.packages._inner(
-        packages=["wireguard-tools", "wireguard-tools-openrc"],
-        update=True,
-    )
 
     # Build configuration template (if it doesn't exist)
     if not host.get_fact(File, f"/etc/wireguard/{interface}.conf"):
