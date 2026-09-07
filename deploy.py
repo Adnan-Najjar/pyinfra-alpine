@@ -1,3 +1,4 @@
+from pyinfra.context import host
 from pyinfra.operations import server, files, apk
 from tasks.wireguard import wireguard_setup
 
@@ -62,5 +63,6 @@ server.shell(
 # Update
 apk.update()
 
-# WireGuard setup
-wireguard_setup(name="Setup WireGuard on inventory")
+# WireGuard setup (wg_mesh hosts only)
+if "wg_mesh" in host.groups:
+    wireguard_setup(name="Setup WireGuard on wg_mesh")

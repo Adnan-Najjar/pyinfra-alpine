@@ -5,13 +5,14 @@ from pyinfra.api.operation import operation
 from pyinfra.operations import files, server
 from facts import WireGuardPrivateKey, WireGuardPublicKey
 
+
 @operation()
-def wireguard_setup(
-    interface: str = "wg0",
-    listen_port: int = 51820,
-    private_key="/etc/wireguard/private.key",
-    public_key="/etc/wireguard/public.key",
-):
+def wireguard_setup():
+
+    interface: str = host.data.get("interface") or "wg0"
+    listen_port: int = host.data.get("listen_port") or 51820
+    private_key: str = host.data.get("private_key") or "/etc/wireguard/private.key"
+    public_key: str = host.data.get("public_key") or "/etc/wireguard/public.key"
 
     # Get current host private key (or create it if it doesn't exist)
     my_private_key = host.get_fact(WireGuardPrivateKey, private_key_path=private_key)
@@ -19,14 +20,25 @@ def wireguard_setup(
     # Build list of peers from all OTHER hosts in inventory
     peers = []
     for h in inventory:
-        if h.name == host.name:
+        if h.name == host.name or "wg_mesh" not in h.groups:
             continue
 
         # Get current host public key (or create it if it doesn't exist)
-        peer_pubkey = h.get_fact(WireGuardPublicKey, private_key_path=private_key, public_key_path=public_key)
+        peer_pubkey = h.get_fact(
+            WireGuardPublicKey,
+            private_key_path=private_key,
+            public_key_path=public_key,
+        )
         if not peer_pubkey:
-            h.get_fact(WireGuardPrivateKey, private_key_path=private_key)
-            peer_pubkey = h.get_fact(WireGuardPublicKey, private_key_path=private_key, public_key_path=public_key)
+            h.get_fact(
+                WireGuardPrivateKey,
+                private_key_path=private_key,
+            )
+            peer_pubkey = h.get_fact(
+                WireGuardPublicKey,
+                private_key_path=private_key,
+                public_key_path=public_key,
+            )
             if not peer_pubkey:
                 continue
 

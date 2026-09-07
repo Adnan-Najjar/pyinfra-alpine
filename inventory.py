@@ -1,4 +1,8 @@
 hosts = [
+    "@incus/vm4",
+]
+
+wg_mesh = [
     (
         "@incus/vm1",
         {"wg_ip": "192.168.2.1/24"},
