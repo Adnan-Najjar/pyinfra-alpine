@@ -1,9 +1,32 @@
 from pyinfra.context import host, inventory
-from pyinfra.facts.openrc import OpenrcStatus
-from pyinfra.facts.files import File
 from pyinfra.api.operation import operation
 from pyinfra.operations import files, server
-from facts import WireGuardPrivateKey, WireGuardPublicKey
+from pyinfra.facts.server import Command
+from pyinfra.facts.files import File
+
+
+@operation()
+def wireguard_keygen():
+
+    private_key: str = host.data.get("private_key") or "/etc/wireguard/private.key"
+    public_key: str = host.data.get("public_key") or "/etc/wireguard/public.key"
+
+    # Install wireguard
+    yield from server.packages._inner(
+        packages=["wireguard-tools", "wireguard-tools-openrc"]
+    )
+
+    # Create private key if it doesn't exist
+    if not host.get_fact(File, private_key):
+        yield from server.shell._inner(
+            commands=[f"umask 077 && wg genkey > {private_key}"]
+        )
+
+    # Create public key if it doesn't exist
+    if not host.get_fact(File, public_key):
+        yield from server.shell._inner(
+            commands=[f"wg pubkey < {private_key} > {public_key}"]
+        )
 
 
 @operation()
@@ -14,8 +37,10 @@ def wireguard_setup():
     private_key: str = host.data.get("private_key") or "/etc/wireguard/private.key"
     public_key: str = host.data.get("public_key") or "/etc/wireguard/public.key"
 
-    # Get current host private key (or create it if it doesn't exist)
-    my_private_key = host.get_fact(WireGuardPrivateKey, private_key_path=private_key)
+    my_private_key = host.get_fact(
+        Command,
+        command=f"cat {private_key}",
+    )
 
     # Build list of peers from all OTHER hosts in inventory
     peers = []
@@ -23,27 +48,17 @@ def wireguard_setup():
         if h.name == host.name or "wg_mesh" not in h.groups:
             continue
 
-        # Get current host public key (or create it if it doesn't exist)
+        # Get current host public key
         peer_pubkey = h.get_fact(
-            WireGuardPublicKey,
-            private_key_path=private_key,
-            public_key_path=public_key,
+            Command,
+            command=f"cat {public_key}",
         )
+        # Skip if no public key
         if not peer_pubkey:
-            h.get_fact(
-                WireGuardPrivateKey,
-                private_key_path=private_key,
-            )
-            peer_pubkey = h.get_fact(
-                WireGuardPublicKey,
-                private_key_path=private_key,
-                public_key_path=public_key,
-            )
-            if not peer_pubkey:
-                continue
+            continue
 
-        peer_wg_ip = h.data.get("wg_ip")
         # Skip if no WireGuard IP
+        peer_wg_ip = h.data.get("wg_ip")
         if not peer_wg_ip:
             continue
 
@@ -55,32 +70,28 @@ def wireguard_setup():
             }
         )
 
-    # Build configuration template (if it doesn't exist)
-    if not host.get_fact(File, f"/etc/wireguard/{interface}.conf"):
-        yield from files.template._inner(
-            name="Build WireGuard config",
-            src=f"templates/{interface}.conf.j2",
-            dest=f"/etc/wireguard/{interface}.conf",
-            mode="600",
-            my_wg_ip=host.data.get("wg_ip"),
-            my_private_key=my_private_key,
-            listen_port=listen_port,
-            peers=peers,
-        )
+    # Build configuration template
+    yield from files.template._inner(
+        name="Build WireGuard config",
+        src=f"templates/{interface}.conf.j2",
+        dest=f"/etc/wireguard/{interface}.conf",
+        mode="600",
+        my_wg_ip=host.data.get("wg_ip"),
+        my_private_key=my_private_key,
+        listen_port=listen_port,
+        peers=peers,
+    )
 
-    # Only create WireGuard service (if it doesn't exist)
-    if not host.get_fact(File, f"/etc/init.d/wg-quick.{interface}"):
-        yield from server.shell._inner(
-            commands=[
-                f"cp /etc/init.d/wg-quick /etc/init.d/wg-quick.{interface}",
-            ],
-        )
+    # Create WireGuard service
+    yield from files.put._inner(
+        src="files/wg-quick",
+        dest=f"/etc/init.d/wg-quick.{interface}",
+        mode="755",
+    )
 
-    # Start WireGuard (if it is not started)
-    status = host.get_fact(OpenrcStatus)
-
-    if status.get(f"wg-quick.{interface}") != "started":
-        yield from server.service._inner(
-            service=f"wg-quick.{interface}",
-            enabled=True,
-        )
+    # Start WireGuard
+    yield from server.service._inner(
+        service=f"wg-quick.{interface}",
+        running=True,
+        enabled=True,
+    )
