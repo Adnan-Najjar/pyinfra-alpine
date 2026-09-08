@@ -1,15 +1,13 @@
 from pyinfra.context import host, inventory
+from pyinfra.api.command import StringCommand
 from pyinfra.api.operation import operation
+from pyinfra.api.deploy import deploy
 from pyinfra.operations import files, server
-from pyinfra.facts.server import Command
-from pyinfra.facts.files import File
+from pyinfra.facts.files import File, FileContents
 
 
 @operation()
-def wireguard_keygen():
-
-    private_key: str = host.data.get("private_key") or "/etc/wireguard/private.key"
-    public_key: str = host.data.get("public_key") or "/etc/wireguard/public.key"
+def wireguard_keygen(private_key_path: str, public_key_path: str):
 
     # Install wireguard
     yield from server.packages._inner(
@@ -17,19 +15,15 @@ def wireguard_keygen():
     )
 
     # Create private key if it doesn't exist
-    if not host.get_fact(File, private_key):
-        yield from server.shell._inner(
-            commands=[f"umask 077 && wg genkey > {private_key}"]
-        )
+    if not host.get_fact(File, path=private_key_path):
+        yield StringCommand(f"umask 077 && wg genkey > {private_key_path}")
 
     # Create public key if it doesn't exist
-    if not host.get_fact(File, public_key):
-        yield from server.shell._inner(
-            commands=[f"wg pubkey < {private_key} > {public_key}"]
-        )
+    if not host.get_fact(File, path=public_key_path):
+        yield StringCommand(f"wg pubkey < {private_key_path} > {public_key_path}")
 
 
-@operation()
+@deploy("WireGuard setup")
 def wireguard_setup():
 
     interface: str = host.data.get("interface") or "wg0"
@@ -37,10 +31,16 @@ def wireguard_setup():
     private_key: str = host.data.get("private_key") or "/etc/wireguard/private.key"
     public_key: str = host.data.get("public_key") or "/etc/wireguard/public.key"
 
-    my_private_key = host.get_fact(
-        Command,
-        command=f"cat {private_key}",
+    # Generate WireGuard keys
+    wireguard_keygen(
+        name="Generate keys for WireGuard",
+        private_key_path=private_key,
+        public_key_path=public_key,
     )
+
+    my_private_key = host.get_fact(FileContents, private_key)
+    if my_private_key:
+        my_private_key = my_private_key[0].strip()
 
     # Build list of peers from all OTHER hosts in inventory
     peers = []
@@ -49,12 +49,11 @@ def wireguard_setup():
             continue
 
         # Get current host public key
-        peer_pubkey = h.get_fact(
-            Command,
-            command=f"cat {public_key}",
-        )
+        peer_pubkey = h.get_fact(FileContents, public_key)
+        if peer_pubkey and peer_pubkey[0].strip():
+            peer_pubkey = peer_pubkey[0].strip()
         # Skip if no public key
-        if not peer_pubkey:
+        else:
             continue
 
         # Skip if no WireGuard IP
@@ -71,7 +70,7 @@ def wireguard_setup():
         )
 
     # Build configuration template
-    yield from files.template._inner(
+    wg_config = files.template(
         name="Build WireGuard config",
         src=f"templates/{interface}.conf.j2",
         dest=f"/etc/wireguard/{interface}.conf",
@@ -83,15 +82,16 @@ def wireguard_setup():
     )
 
     # Create WireGuard service
-    yield from files.put._inner(
+    wg_init = files.put(
         src="files/wg-quick",
         dest=f"/etc/init.d/wg-quick.{interface}",
         mode="755",
     )
 
-    # Start WireGuard
-    yield from server.service._inner(
+    # Start WireGuard service
+    server.service(
         service=f"wg-quick.{interface}",
         running=True,
         enabled=True,
+        _if=wg_config.did_change or wg_init.did_change,
     )

@@ -1,7 +1,7 @@
 from pyinfra.context import host
 from pyinfra.operations import server, files, apk
 from pyinfra.facts.files import FindInFile
-from tasks.wireguard import wireguard_keygen, wireguard_setup
+from tasks.wireguard import wireguard_setup
 
 useradd_install = apk.packages(
     name="Install useradd from shadow package",
@@ -77,5 +77,4 @@ apk.update()
 
 # WireGuard setup (wg_mesh hosts only)
 if "wg_mesh" in host.groups:
-    wireguard_keygen(name="Generate keys for WireGuard")
     wireguard_setup(name="Setup WireGuard on wg_mesh")
