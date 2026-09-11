@@ -1,12 +1,15 @@
 from pyinfra.context import host
-from pyinfra.operations import server, files, apk
+from pyinfra.operations import files
 from pyinfra.facts.files import FindInFile
+
+from tasks.os_name import get_os_name
+from tasks.users import user_setup
+from tasks.firewall import firewall_setup
 from tasks.wireguard import wireguard_setup
 
-useradd_install = apk.packages(
-    name="Install useradd from shadow package",
-    packages=["shadow"],
-)
+os_name = get_os_name()
+is_alpine = os_name == "alpine"
+is_freebsd = os_name == "freebsd"
 
 # SSH hardening
 files.put(
@@ -17,75 +20,54 @@ files.put(
 )
 
 # Non-root user
-server.user(
-    name="Non-root user",
-    user="user",
-    home="/home/user",
-    shell="/bin/ash",
-    groups=["wheel"],
-    append=True,
-    create_home=True,
-    _if=useradd_install.did_succeed,
-)
+user_setup(name="Setup non-root user")
 
 # Firewall
-apk.packages(
-    name="Install firewall packages",
-    packages=["nftables"],
-)
-server.service(
-    name="Enable firewall",
-    service="nftables",
-    enabled=True,
-)
+firewall_setup(name="Setup firewall")
 
-wg_rule = files.put(
-    name="Configure firewall",
-    src="files/wireguard.nft",
-    dest="/etc/nftables.d/wireguard.nft",
-    mode=644,
-)
-server.service(
-    name="Restart firewall",
-    service="nftables",
-    restarted=True,
-    _if=wg_rule.did_change
-)
-
-# apk cache
-files.directory(
-    name="Create apk cache target directory",
-    path="/var/cache/apk",
-    present=True,
-    _ignore_errors=True,
-)
-
-files.link(
-    name="Configure apk cache symlink",
-    path="/etc/apk/cache",
-    target="/var/cache/apk",
-    symbolic=True,
-    force=True,
-    _ignore_errors=True,
-)
-
-# Community repo
-community_repo_links: list | None = host.get_fact(
-    FindInFile,
-    path="/etc/apk/repositories",
-    pattern="^#.*community",
-)
-
-if community_repo_links:
-    files.replace(
-        name="Enable Alpine Community Repository",
-        path="/etc/apk/repositories",
-        text=community_repo_links[0],
-        replace=community_repo_links[0].replace("#", ""),
+if is_alpine:
+    # apk cache
+    files.directory(
+        name="Create apk cache target directory",
+        path="/var/cache/apk",
+        present=True,
+        _ignore_errors=True,
     )
 
-# Update
-apk.update()
+    files.link(
+        name="Configure apk cache symlink",
+        path="/etc/apk/cache",
+        target="/var/cache/apk",
+        symbolic=True,
+        force=True,
+        _ignore_errors=True,
+    )
+
+    # Community repo
+    community_repo_links: list | None = host.get_fact(
+        FindInFile,
+        path="/etc/apk/repositories",
+        pattern="^#.*community",
+    )
+
+    if community_repo_links:
+        files.replace(
+            name="Enable Alpine Community Repository",
+            path="/etc/apk/repositories",
+            text=community_repo_links[0],
+            replace=community_repo_links[0].replace("#", ""),
+        )
+
+    # Update
+    from pyinfra.operations import apk
+
+    apk.update()
+
+elif is_freebsd:
+    # Update
+    from pyinfra.operations.freebsd import pkg
+
+    pkg.update()
 
 # WireGuard setup (wg_mesh hosts only)
 if "wg_mesh" in host.groups:
