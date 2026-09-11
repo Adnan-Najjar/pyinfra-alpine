@@ -33,11 +33,23 @@ apk.packages(
     name="Install firewall packages",
     packages=["nftables"],
 )
-
 server.service(
-    name="Configure firewall",
+    name="Enable firewall",
     service="nftables",
     enabled=True,
+)
+
+wg_rule = files.put(
+    name="Configure firewall",
+    src="files/wireguard.nft",
+    dest="/etc/nftables.d/wireguard.nft",
+    mode=644,
+)
+server.service(
+    name="Restart firewall",
+    service="nftables",
+    restarted=True,
+    _if=wg_rule.did_change
 )
 
 # apk cache

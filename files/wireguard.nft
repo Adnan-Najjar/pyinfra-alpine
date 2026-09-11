@@ -1,0 +1,5 @@
+table inet filter {
+  chain input {
+    udp dport 51820 accept comment "WireGuard"
+  }
+}
