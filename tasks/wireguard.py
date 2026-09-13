@@ -17,7 +17,7 @@ def wireguard_keygen(private_key_path: str, public_key_path: str):
     # Install wireguard
     if os_name == "alpine":
         yield from server.packages._inner(
-            packages=["wireguard-tools", "wireguard-tools-openrc"]
+            packages=["wireguard-tools", "wireguard-tools-openrc"],
         )
     elif os_name == "freebsd":
         from pyinfra.operations.freebsd import pkg
@@ -38,8 +38,8 @@ def wireguard_setup():
 
     os_name = get_os_name()
 
-    interface: str = host.data.get("interface") or "wg0"
-    listen_port: int = host.data.get("listen_port") or 51820
+    interface: str = host.data.get("wg_interface") or "wg0"
+    listen_port: int = host.data.get("wg_listen_port") or 51820
     private_key: str = host.data.get("private_key") or "/etc/wireguard/private.key"
     public_key: str = host.data.get("public_key") or "/etc/wireguard/public.key"
 
@@ -69,10 +69,10 @@ def wireguard_setup():
         # Get current host public key
         if get_os_name(h) == "freebsd":
             private_key = "/usr/local/etc/wireguard/private.key"
-            public_key = "/usr/local/etc/wireguard/private.key"
+            public_key = "/usr/local/etc/wireguard/public.key"
         else:
-            private_key = host.data.get("private_key") or "/etc/wireguard/private.key"
-            public_key = host.data.get("public_key") or "/etc/wireguard/public.key"
+            private_key = h.data.get("private_key") or "/etc/wireguard/private.key"
+            public_key = h.data.get("public_key") or "/etc/wireguard/public.key"
         peer_pubkey = h.get_fact(FileContents, public_key)
         if peer_pubkey and peer_pubkey[0].strip():
             peer_pubkey = peer_pubkey[0].strip()
@@ -106,32 +106,61 @@ def wireguard_setup():
     )
 
     if os_name == "alpine":
-        # Create WireGuard service
-        wg_init = files.put(
+        files.put(
+            name="Create WireGuard service",
             src="files/wg-quick-openrc",
             dest=f"/etc/init.d/wg-quick.{interface}",
             mode="755",
         )
 
-        # Start WireGuard service
         server.service(
+            name="Start WireGuard service",
             service=f"wg-quick.{interface}",
             running=True,
             enabled=True,
-            _if=wg_config.did_change or wg_init.did_change,
+        )
+
+        server.shell(
+            name="Reload WireGuard config",
+            commands=[
+                f"wg-quick strip {config_path}/{interface}.conf | wg syncconf {interface} /dev/stdin",
+            ],
+            _if=wg_config.did_change,
         )
 
     elif os_name == "freebsd":
-        from pyinfra.operations.freebsd import service, sysrc
+        from pyinfra.operations.freebsd import sysrc, service
 
-        # Enable WireGuard interface via rc.conf
         sysrc.sysrc(
-            parameter="wg_interfaces",
+            name="Load WireGuard kernel module",
+            parameter="kldload",
+            value="if_wg",
+            command="add",
+        )
+
+        sysrc.sysrc(
+            name="Set WireGuard interface",
+            parameter="wireguard_interfaces",
             value=interface,
         )
 
-        # Start WireGuard service (built-in base rc.d script)
+        sysrc.sysrc(
+            name="Enable WireGuard",
+            parameter="wireguard_enable",
+            value="YES",
+        )
+
         service.service(
-            srvname="wireguard",
+            name="Start WireGuard service",
+            srvname=f"wireguard",
             srvstate="started",
+            _if=wg_config.did_change,
+        )
+
+        server.shell(
+            name="Reload WireGuard config",
+            commands=[
+                f"wg-quick strip {config_path}/{interface}.conf | wg syncconf {interface} /dev/stdin",
+            ],
+            _if=wg_config.did_change,
         )

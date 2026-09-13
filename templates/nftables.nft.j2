@@ -1,0 +1,16 @@
+table inet filter {
+  chain input {
+    type filter hook input priority filter; policy drop;
+    {% if wireguard %}
+    udp dport {{ wg_port }} accept comment "WireGuard"
+    iifname "{{ wg_interface }}" accept comment "WireGuard mesh"
+    {% endif %}
+    {% if http %}
+    tcp dport { 80, 443 } accept comment "HTTP/HTTPS"
+    {% endif %}
+  }
+
+  chain output {
+    type filter hook output priority filter; policy accept;
+  }
+}

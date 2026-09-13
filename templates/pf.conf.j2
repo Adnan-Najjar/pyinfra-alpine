@@ -1,0 +1,23 @@
+set skip on lo
+block in all
+pass out all
+
+{% if wireguard %}
+# WireGuard
+pass in quick proto udp from any to any port {{ wg_port }}
+pass in quick on {{ wg_interface }} from any to any
+{% endif %}
+
+{% if http %}
+# HTTP/HTTPS
+pass in quick proto tcp from any to any port { 80, 443 }
+{% endif %}
+
+# SSH
+pass in quick proto tcp from any to any port 22
+
+# Incus
+pass in quick proto tcp from any to any port 8443
+
+# Log all blocked packets
+block in log all
