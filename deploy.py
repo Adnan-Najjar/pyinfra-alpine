@@ -6,6 +6,7 @@ from tasks.os_name import get_os_name
 from tasks.users import user_setup
 from tasks.firewall import firewall_setup
 from tasks.wireguard import wireguard_setup
+from tasks.nginx import nginx_setup
 
 os_name = get_os_name()
 is_alpine = os_name == "alpine"
@@ -72,3 +73,7 @@ elif is_freebsd:
 # WireGuard setup (wg_mesh hosts only)
 if "wg_mesh" in host.groups:
     wireguard_setup(name="Setup WireGuard on wg_mesh")
+
+# nginx web server (web_server hosts only)
+if host.data.get("web_server"):
+    nginx_setup(name="Deploy nginx web server")
